@@ -1,0 +1,2053 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>ระบบขอความช่วยเหลือน้ำท่วม</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Firebase v8 -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+
+  <!-- Leaflet (แผนที่ OpenStreetMap) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <style>
+    
+  :root {
+  --zoom-level: 1;   /* ค่าเริ่มต้น = 100% */
+}
+
+#zoomRoot {
+  transform: scale(var(--zoom-level));
+  transform-origin: top left;
+}
+
+/* ป้องกันทะลุจอเวลา scale */
+body, html {
+  overflow-x: hidden;
+}
+  
+  :root {
+      --primary: #2563eb;
+      --primary-soft: #eff4ff;
+      --danger: #ef4444;
+      --success: #16a34a;
+      --warning: #f59e0b;
+      --bg: #f3f4f6;
+      --text: #111827;
+      --card: #ffffff;
+      --border: #e5e7eb;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --shadow-soft: 0 10px 25px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      background: radial-gradient(circle at top, #dbeafe 0, #f3f4f6 50%, #e5e7eb 100%);
+      color: var(--text);
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+    }
+
+    /* ให้ container ใช้เต็มจอ */
+    .app-container {
+      width: 100%;
+      max-width: 100%;
+      min-height: 100vh;
+      background: rgba(255, 255, 255, 0.96);
+      border-radius: 0;
+      box-shadow: none;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      backdrop-filter: blur(10px);
+      border: none;
+    }
+
+    @media (min-width: 768px) {
+      .app-container {
+        padding: 16px 24px;
+      }
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      background: radial-gradient(circle at 30% 30%, #60a5fa, #1d4ed8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 800;
+      font-size: 20px;
+      box-shadow: 0 0 20px rgba(37, 99, 235, 0.5);
+    }
+
+    .app-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .app-subtitle {
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #4f46e5;
+      font-size: 11px;
+      font-weight: 500;
+      align-self: flex-start;
+    }
+
+    .pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+    }
+
+    .tab-bar {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      padding: 4px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      position: relative;
+      margin-top: 4px;
+    }
+
+    .tab-btn {
+      position: relative;
+      z-index: 1;
+      border: none;
+      background: transparent;
+      padding: 8px 0;
+      font-size: 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      color: #4b5563;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: color 0.18s ease;
+    }
+
+    .tab-btn span.icon {
+      font-size: 16px;
+    }
+
+    .tab-btn.active {
+      color: #111827;
+      font-weight: 600;
+    }
+
+    .tab-indicator {
+      position: absolute;
+      top: 4px;
+      bottom: 4px;
+      width: calc(50% - 4px);
+      border-radius: 999px;
+      background: #ffffff;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+      transition: transform 0.2s ease;
+    }
+
+    .tab-indicator.right {
+      transform: translateX(100%);
+    }
+
+    /* main เปลี่ยนให้เป็น layout หน้าเดียว (ไม่ต้อง grid สองฝั่ง) */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      margin-top: 8px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius-lg);
+      padding: 14px;
+      border: 1px solid var(--border);
+      box-shadow: 0 6px 16px rgba(148, 163, 184, 0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+      /* ให้ card สูงได้เยอะ แต่ยัง scroll ได้ */
+      max-height: calc(100vh - 130px);
+      overflow: auto;
+    }
+
+    @media (min-width: 900px) {
+      .card {
+        padding: 16px 18px;
+        max-height: calc(100vh - 140px);
+      }
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-title-emoji {
+      font-size: 18px;
+    }
+
+    .card-desc {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .divider {
+      height: 1px;
+      background: linear-gradient(to right, transparent, #e5e7eb, transparent);
+    }
+
+    .form-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .field-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #374151;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .field-label span.required {
+      font-size: 11px;
+      color: var(--danger);
+    }
+
+    .field-hint {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    input[type="text"],
+    input[type="tel"],
+    textarea {
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+      padding: 8px 10px;
+      font-size: 13px;
+      outline: none;
+      background: #f9fafb;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+    }
+
+    input[type="text"]:focus,
+    input[type="tel"]:focus,
+    textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+      background: #ffffff;
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    .btn {
+      border-radius: 999px;
+      border: none;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: center;
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.16s ease;
+      white-space: nowrap;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+      box-shadow: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      box-shadow: 0 10px 18px rgba(37, 99, 235, 0.35);
+    }
+
+    .btn-outline {
+      background: #f9fafb;
+      color: #1f2937;
+      border: 1px solid #d1d5db;
+    }
+
+    .btn-danger {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+
+    .btn-sm {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .btn-full {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .btn-icon {
+      font-size: 14px;
+    }
+
+    .location-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .location-status {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #f3f4f6;
+      color: #6b7280;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .location-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #9ca3af;
+    }
+
+    .location-status-dot.ok {
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    }
+
+    .image-input {
+      border-radius: 12px;
+      border: 1px dashed #cbd5f5;
+      padding: 10px;
+      background: #eff6ff;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .image-input-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #1d4ed8;
+    }
+
+    .image-preview-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .image-chip {
+      position: relative;
+      width: 60px;
+      height: 60px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #bfdbfe;
+      background: #e5e7eb;
+    }
+
+    .image-chip img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .image-chip span {
+      position: absolute;
+      bottom: 2px;
+      right: 4px;
+      background: rgba(15, 23, 42, 0.7);
+      color: white;
+      font-size: 10px;
+      padding: 1px 4px;
+      border-radius: 999px;
+    }
+
+    .helper-info {
+      font-size: 12px;
+      color: #4b5563;
+      background: #f3f4ff;
+      border-radius: 12px;
+      padding: 8px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .status-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+    }
+
+    .status-waiting {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-waiting .status-dot {
+      background: #f59e0b;
+    }
+
+    .status-accepted {
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+
+    .status-accepted .status-dot {
+      background: #2563eb;
+    }
+
+    .status-completed {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .status-completed .status-dot {
+      background: #22c55e;
+    }
+
+    .status-cancelled {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+
+    .status-cancelled .status-dot {
+      background: #ef4444;
+    }
+
+    .table-wrapper {
+      position: relative;
+      border-radius: 12px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      padding: 8px;
+      max-height: 100%;
+      overflow: auto;
+      scroll-behavior: smooth;
+    }
+
+    .group-header {
+      position: sticky;
+      top: 0;
+      background: #f9fafb;
+      padding: 5px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #4b5563;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 2;
+    }
+
+    .group-header span.location-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .group-header span.badge {
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 10px;
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .case-row {
+      background: white;
+      border-radius: 10px;
+      padding: 8px 8px;
+      margin-top: 6px;
+      border: 1px solid #e5e7eb;
+      display: grid;
+      grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.2fr);
+      gap: 8px;
+      cursor: pointer;
+      transition: background 0.12s ease, box-shadow 0.12s ease, transform 0.06s ease;
+    }
+
+    .case-row:active {
+      transform: scale(0.99);
+      box-shadow: none;
+    }
+
+    .case-row:hover {
+      box-shadow: 0 8px 16px rgba(148, 163, 184, 0.25);
+    }
+
+    .case-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .case-topline {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .case-name {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .case-time {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+
+    .case-needs {
+      font-size: 12px;
+      color: #374151;
+    }
+
+    .case-situation {
+      font-size: 11px;
+      color: #6b7280;
+      max-height: 32px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .case-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 11px;
+      color: #4b5563;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .case-distance {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    .case-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .badge-soft {
+      border-radius: 999px;
+      padding: 2px 6px;
+      font-size: 11px;
+      background: #f3f4f6;
+      color: #4b5563;
+    }
+
+    .map-container {
+      width: 100%;
+      height: 220px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+    }
+
+    .muted {
+      color: #9ca3af;
+    }
+
+    .small {
+      font-size: 11px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #111827;
+      color: #f9fafb;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.4);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 50;
+    }
+
+    .toast.show {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate(-50%, -4px);
+    }
+
+    .badge-gps {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #0369a1;
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-gps-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+    }
+
+    .badge-gps.off .badge-gps-dot {
+      background: #9ca3af;
+      box-shadow: none;
+    }
+
+    .badge-gps.off {
+      background: #f3f4f6;
+      color: #6b7280;
+    }
+
+    .info-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .loading-spinner {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 2px solid rgba(148, 163, 184, 0.5);
+      border-top-color: #2563eb;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .tag {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #4f46e5;
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tag-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #4f46e5;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .chips-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .chip {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #f3f4f6;
+      font-size: 11px;
+      color: #4b5563;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.4);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 40;
+      padding: 12px;
+    }
+
+    .modal-backdrop.show {
+      display: flex;
+    }
+
+    .modal-card {
+      background: white;
+      border-radius: 20px;
+      max-width: 460px;
+      width: 100%;
+      padding: 14px;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.45);
+      max-height: 90vh;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-title {
+      font-size: 15px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .modal-close {
+      border-radius: 999px;
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: #f3f4f6;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      color: #6b7280;
+    }
+
+    .modal-section {
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      padding: 8px 10px;
+      background: #f9fafb;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .modal-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #4b5563;
+    }
+
+    .modal-grid-two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .gallery-row {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .gallery-thumb {
+      flex: 0 0 auto;
+      width: 90px;
+      height: 70px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+      background: #111827;
+    }
+
+    .gallery-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .badge-small {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+
+    .text-muted {
+      color: #9ca3af;
+    }
+
+    .text-danger {
+      color: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+<div class="app-container">
+  <header>
+    <div class="logo-row">
+      <div class="logo-badge">F</div>
+      <div>
+        <div class="app-title">Flood Help Center</div>
+        <div class="app-subtitle">
+          ระบบแจ้งและจัดลำดับคำขอความช่วยเหลือช่วงน้ำท่วม — ไม่มีล็อกอิน ใช้งานได้ทันที
+        </div>
+        
+        
+      </div>
+    </div>
+    <div class="pill">
+      <span class="pill-dot"></span>
+      ข้อมูลเก็บบน Cloud (Firestore + Storage) ฟรีระดับใช้งานเบื้องต้น
+    </div>
+    <div class="tab-bar">
+      <div class="tab-indicator" id="tabIndicator"></div>
+      <button class="tab-btn active" id="tabFormBtn">
+        <span class="icon">🆘</span> ขอความช่วยเหลือ
+      </button>
+      <button class="tab-btn" id="tabListBtn">
+        <span class="icon">📍</span> ดูเคสใกล้คุณ
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- หน้า 1: แบบฟอร์มขอความช่วยเหลือ (เต็มจอ) -->
+    <section class="card" id="formSection">
+      <div class="card-header">
+        <div>
+          <div class="card-title">
+            <span class="card-title-emoji">🆘</span> แบบฟอร์มแจ้งขอความช่วยเหลือ
+          </div>
+          <p class="card-desc">
+            กรอกข้อมูลให้ครบ + เปิด GPS + ถ่ายรูปสถานการณ์จริง (อย่างน้อย 1 รูป) เพื่อให้ทีมช่วยเหลือประเมินได้เร็วขึ้น
+          </p>
+        </div>
+      </div>
+      <div class="divider"></div>
+
+      <form class="form-grid" id="helpForm">
+        <div class="section-title">ข้อมูลผู้แจ้ง</div>
+
+        <div class="field">
+          <label class="field-label">
+            ชื่อ-นามสกุล
+            <span class="required">* จำเป็น</span>
+          </label>
+          <input type="text" id="requesterName" placeholder="เช่น นายสมชาย ใจดี" required>
+        </div>
+
+        <div class="field">
+          <label class="field-label">
+            เบอร์ติดต่อหลัก
+            <span class="required">* จำเป็น</span>
+          </label>
+          <input type="tel" id="requesterPhone" placeholder="เช่น 08xxxxxxxx" required>
+          <div class="field-hint">กรุณาใช้เบอร์ที่สามารถติดต่อได้จริง</div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">
+            ช่องทางติดต่ออื่น (ถ้ามี)
+          </label>
+          <input type="text" id="requesterContactAlt" placeholder="LINE ID / Facebook / อื่น ๆ">
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-title">ความช่วยเหลือที่ต้องการ</div>
+
+        <div class="field">
+          <label class="field-label">
+            สิ่งที่ต้องการ
+            <span class="required">* จำเป็น</span>
+          </label>
+          <input type="text" id="needs" placeholder="เช่น น้ำดื่ม, อาหารแห้ง, ย้ายคนออกจากพื้นที่" required>
+        </div>
+
+        <div class="field">
+          <label class="field-label">
+            สถานการณ์ตอนนี้
+            <span class="required">* จำเป็น</span>
+          </label>
+          <textarea id="situation" placeholder="เช่น น้ำสูงถึงอก มีผู้สูงอายุ 1 คน เด็กเล็ก 2 คน ไฟดับแล้ว"></textarea>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-title">ตำแหน่งที่อยู่</div>
+
+        <div class="field">
+          <label class="field-label">
+            ตำแหน่งจาก GPS
+          </label>
+          <div class="location-row">
+            <button type="button" class="btn btn-outline btn-sm" id="btnUseCurrentLocation">
+              <span class="btn-icon">📍</span> ใช้ตำแหน่งปัจจุบันของฉัน
+            </button>
+            <div class="location-status" id="locationStatus">
+              <span class="location-status-dot" id="locationStatusDot"></span>
+              <span id="locationStatusText">ยังไม่ได้ดึงตำแหน่ง</span>
+            </div>
+          </div>
+          <div class="field-hint">
+            ระบบจะใช้ GPS + แผนที่ เพื่อระบุตำบล/อำเภอ/จังหวัดโดยอัตโนมัติ
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">
+            ตำบล / อำเภอ / จังหวัด
+          </label>
+          <div class="chips-row" id="areaChips">
+            <span class="chip muted small">ยังไม่ทราบตำแหน่ง</span>
+          </div>
+          <div class="field-hint">
+            กดปุ่ม "ใช้ตำแหน่งปัจจุบันของฉัน" เพื่อเติมข้อมูลอัตโนมัติ
+          </div>
+        </div>
+
+        <div id="mapWrapper" class="field" style="display:none;">
+          <label class="field-label">แผนที่ (ลากเพื่อปรับตำแหน่งได้)</label>
+          <div id="map" class="map-container"></div>
+          <div class="field-hint">
+            สามารถเลื่อนแผนที่แล้วขยับหมุดให้ตรงกับตำแหน่งที่ต้องการได้
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-title">รูปภาพสถานการณ์ (บังคับอย่างน้อย 1 รูป)</div>
+
+        <div class="field">
+          <div class="image-input">
+            <div class="image-input-header">
+              <span>อัปโหลดรูปสถานการณ์จริง (สูงสุด 3 รูป)</span>
+              <label class="btn btn-outline btn-sm" style="cursor:pointer;">
+                เลือกรูป…
+                <input type="file" id="victimImages" accept="image/*" multiple style="display:none;">
+              </label>
+            </div>
+            <div class="field-hint">
+              แนะนำให้ถ่าย: ระดับน้ำ, ภายในบ้าน, ป้ายซอยหรือจุดสังเกตใกล้เคียง
+            </div>
+            <div class="image-preview-grid" id="victimImagePreview"></div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="helper-info">
+          <strong>สรุปการเก็บข้อมูลบน Cloud</strong><br>
+          เมื่อส่งแบบฟอร์ม ข้อมูลจะถูกเก็บใน Firestore collection <code>help_requests</code><br>
+          - สร้าง document ใหม่ 1 ตัว / 1 เคส<br>
+          - ฟิลด์หลัก: ชื่อ, เบอร์, ข้อมูลตำบล/อำเภอ/จังหวัด, สถานการณ์, สถานะเคส, เวลา<br>
+          - รูปถูกเก็บใน Firebase Storage โฟลเดอร์ <code>victim_images/{helpRequestId}/...</code><br>
+          - Firestore จะเก็บเพียง URL ของรูปภาพ (ไม่เก็บไฟล์จริงในฐานข้อมูล)
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full" id="submitHelpBtn">
+          <span class="btn-icon">📤</span> ส่งคำขอความช่วยเหลือ
+        </button>
+      </form>
+    </section>
+
+    <!-- หน้า 2: Dashboard ดูเคส (เต็มจอ) -->
+    <section class="card" id="listSection" style="display:none;">
+      <div class="card-header">
+        <div>
+          <div class="card-title">
+            <span class="card-title-emoji">📍</span> เคสผู้ประสบภัยใกล้คุณ
+          </div>
+          <p class="card-desc">
+            ระบบจะดึงตำแหน่งของคุณ แล้วจัดเรียงเคสตามลำดับ: ตำบลเดียวกัน → อำเภอเดียวกัน → จังหวัดเดียวกัน → ต่างจังหวัด
+          </p>
+        </div>
+        <div class="badge-gps off" id="gpsBadge">
+          <span class="badge-gps-dot"></span> GPS ยังไม่ทำงาน
+        </div>
+      </div>
+      <div class="divider"></div>
+
+      <div class="info-row">
+        <div class="tag" id="viewerAreaTag">
+          <span class="tag-dot"></span>
+          ยังไม่ทราบตำแหน่งคุณ
+        </div>
+        <button class="btn btn-outline btn-sm" id="btnRefreshCases">
+          <span class="btn-icon">🔄</span> รีเฟรชเคส / ดึง GPS ใหม่
+        </button>
+      </div>
+
+      <div class="table-wrapper" id="casesContainer">
+        <div style="padding:8px; font-size:12px; color:#6b7280;">
+          กดค้างที่เคสอย่างน้อย ~1 วินาที เพื่อรับเคสและกรอกข้อมูลผู้ให้ความช่วยเหลือ<br>
+          เคสจะแสดงสีตามสถานะ: รอคนช่วย / มีคนรับเคสแล้ว / ปิดเคส
+        </div>
+      </div>
+
+      <div class="helper-info">
+        <strong>ข้อมูลผู้ช่วยจะถูกเก็บอย่างไร?</strong><br>
+        เมื่อคุณรับเคส ข้อมูลจะบันทึกใน document เดิมที่ Firestore:<br>
+        - ฟิลด์ <code>helperName</code>, <code>helperPhone</code>, <code>helperContactAlt</code><br>
+        - รูปผู้ช่วยถูกเก็บใน Storage: <code>helper_images/{helpRequestId}/...</code><br>
+        - ฟิลด์ <code>helperImageUrl</code> จะเก็บ URL ไว้ใน Firestore<br>
+        - ฟิลด์ <code>status</code> จะอัปเดตเป็น <code>"accepted"</code> และเก็บเวลาใน <code>helperAcceptedAt</code>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Modal รับเคส -->
+<div class="modal-backdrop" id="acceptModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">
+        <span>🤝</span> รับเคสเพื่อช่วยเหลือ
+      </div>
+      <button class="modal-close" data-close-modal="acceptModal">✕</button>
+    </div>
+    <div class="card-desc" style="font-size:12px;">
+      คุณกำลังจะรับเคสนี้ไปช่วยเหลือ กรุณากรอกชื่อและเบอร์ติดต่อของคุณ และแนบรูปยืนยัน (เช่น รูปตัวคุณ/ทีม/รถ/อุปกรณ์)
+    </div>
+
+    <div class="modal-section" id="acceptCaseInfo">
+      <div class="modal-section-title">สรุปเคสที่คุณจะช่วย</div>
+      <div id="acceptCaseSummary" class="small"></div>
+    </div>
+
+    <form id="acceptForm" class="form-grid" style="margin-top:4px;">
+      <div class="field">
+        <label class="field-label">ชื่อผู้ให้ความช่วยเหลือ <span class="required">* จำเป็น</span></label>
+        <input type="text" id="helperName" placeholder="เช่น นายมัง ผู้ช่วยทีม A" required>
+      </div>
+      <div class="field">
+        <label class="field-label">เบอร์ติดต่อ <span class="required">* จำเป็น</span></label>
+        <input type="tel" id="helperPhone" placeholder="เช่น 08xxxxxxxx" required>
+      </div>
+      <div class="field">
+        <label class="field-label">ช่องทางติดต่ออื่น (ถ้ามี)</label>
+        <input type="text" id="helperContactAlt" placeholder="LINE ID / Facebook / อื่น ๆ">
+      </div>
+      <div class="field">
+        <label class="field-label">รูปยืนยัน (บังคับอย่างน้อย 1 รูป)</label>
+        <div class="image-input">
+          <div class="image-input-header">
+            <span>อัปโหลดรูปผู้ช่วย / ทีม / รถ ฯลฯ</span>
+            <label class="btn btn-outline btn-sm" style="cursor:pointer;">
+              เลือกรูป…
+              <input type="file" id="helperImageInput" accept="image/*" style="display:none;">
+            </label>
+          </div>
+          <div class="image-preview-grid" id="helperImagePreview"></div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:4px;">
+        <button type="submit" class="btn btn-primary btn-full" id="acceptSubmitBtn">
+          <span class="btn-icon">✅</span> ยืนยันรับเคสนี้
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal รายละเอียดเคส -->
+<div class="modal-backdrop" id="detailModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">
+        <span>📄</span> รายละเอียดเคสทั้งหมด
+      </div>
+      <button class="modal-close" data-close-modal="detailModal">✕</button>
+    </div>
+
+    <div id="detailContent" class="small">
+      <!-- เติมด้วย JS -->
+    </div>
+  </div>
+</div>
+
+<script>
+  // =========================
+  // 1) ตั้งค่า Firebase
+  // =========================
+  // TODO: แก้ค่า config ด้านล่างนี้เป็นของโปรเจกต์คุณเอง (จาก Firebase console)
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const storage = firebase.storage();
+
+  // ชื่อ collection ที่ใช้เก็บเคส
+  const HELP_COLLECTION = "help_requests";
+
+  // =========================
+  // 2) ตัวแปรสถานะในหน่วยความจำ
+  // =========================
+  let currentLat = null;
+  let currentLng = null;
+  let currentArea = {
+    provinceCode: null,
+    provinceName: null,
+    districtCode: null,
+    districtName: null,
+    subdistrictCode: null,
+    subdistrictName: null
+  };
+
+  let map;
+  let mapMarker;
+
+  let viewerLat = null;
+  let viewerLng = null;
+  let viewerArea = {
+    provinceName: null,
+    districtName: null,
+    subdistrictName: null
+  };
+
+  let allCases = []; // เก็บเคสทั้งหมดที่โหลดมา
+  let unsubscribeCases = null; // ไว้ stop realtime listener เมื่อจำเป็น
+
+  let longPressTimer = null;
+  let longPressTargetId = null;
+  let longPressData = null;
+
+  let selectedCaseForAccept = null; // document data สำหรับ modal รับเคส
+  let selectedCaseIdForAccept = null;
+
+  let helperImageFile = null; // เก็บไฟล์รูปผู้ช่วย
+
+  // =========================
+  // 3) DOM helpers
+  // =========================
+  const $ = (id) => document.getElementById(id);
+
+  function showToast(message, type = "default") {
+    const toast = $("toast");
+    toast.textContent = message;
+    toast.classList.add("show");
+    if (type === "error") {
+      toast.style.background = "#b91c1c";
+    } else if (type === "success") {
+      toast.style.background = "#16a34a";
+    } else {
+      toast.style.background = "#111827";
+    }
+    setTimeout(() => {
+      toast.classList.remove("show");
+    }, 2600);
+  }
+
+  function formatDateTime(ts) {
+    if (!ts) return "-";
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    const dd = d.getDate().toString().padStart(2, "0");
+    const mm = (d.getMonth() + 1).toString().padStart(2, "0");
+    const yy = d.getFullYear();
+    const hh = d.getHours().toString().padStart(2, "0");
+    const min = d.getMinutes().toString().padStart(2, "0");
+    return `${dd}/${mm}/${yy} ${hh}:${min} น.`;
+  }
+
+  function statusBadge(status) {
+    const s = (status || "").toLowerCase();
+    if (s === "waiting") {
+      return '<span class="status-badge status-waiting"><span class="status-dot"></span>รอคนช่วย</span>';
+    } else if (s === "accepted") {
+      return '<span class="status-badge status-accepted"><span class="status-dot"></span>มีคนรับเคสแล้ว</span>';
+    } else if (s === "completed") {
+      return '<span class="status-badge status-completed"><span class="status-dot"></span>ช่วยเสร็จแล้ว</span>';
+    } else if (s === "cancelled") {
+      return '<span class="status-badge status-cancelled"><span class="status-dot"></span>ยกเลิก</span>';
+    }
+    return '<span class="status-badge status-waiting"><span class="status-dot"></span>รอคนช่วย</span>';
+  }
+
+  // =========================
+  // 4) TAB สลับหน้า
+  // =========================
+  const tabIndicator = $("tabIndicator");
+  const tabFormBtn = $("tabFormBtn");
+  const tabListBtn = $("tabListBtn");
+  const formSection = $("formSection");
+  const listSection = $("listSection");
+
+  tabFormBtn.addEventListener("click", () => {
+    tabFormBtn.classList.add("active");
+    tabListBtn.classList.remove("active");
+    tabIndicator.classList.remove("right");
+    formSection.style.display = "flex";
+    listSection.style.display = "none";
+  });
+
+  tabListBtn.addEventListener("click", () => {
+    tabListBtn.classList.add("active");
+    tabFormBtn.classList.remove("active");
+    tabIndicator.classList.add("right");
+    formSection.style.display = "none";
+    listSection.style.display = "flex";
+    // ตอนสลับไปหน้า list ให้ดึง GPS + เคส
+    initViewerLocationAndCases();
+  });
+
+  // =========================
+  // 5) ดึงตำแหน่งผู้ขอความช่วยเหลือ + แผนที่
+  // =========================
+  const btnUseCurrentLocation = $("btnUseCurrentLocation");
+  const locationStatus = $("locationStatus");
+  const locationStatusDot = $("locationStatusDot");
+  const locationStatusText = $("locationStatusText");
+  const areaChips = $("areaChips");
+  const mapWrapper = $("mapWrapper");
+
+  btnUseCurrentLocation.addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      showToast("อุปกรณ์นี้ไม่รองรับการดึงตำแหน่ง", "error");
+      return;
+    }
+    locationStatusText.textContent = "กำลังดึงตำแหน่ง…";
+    locationStatusDot.classList.remove("ok");
+
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      currentLat = pos.coords.latitude;
+      currentLng = pos.coords.longitude;
+
+      locationStatusDot.classList.add("ok");
+      locationStatusText.textContent = "ดึงตำแหน่งเรียบร้อย";
+
+      showToast("ดึงตำแหน่งผู้ขอความช่วยเหลือสำเร็จ", "success");
+
+      // ใช้ reverse geocoding เอา lat/lng -> ตำบล/อำเภอ/จังหวัด
+      try {
+        const area = await reverseGeocode(currentLat, currentLng);
+        currentArea = area;
+        renderAreaChips(areaChips, area);
+      } catch (e) {
+        console.error(e);
+        showToast("ดึงข้อมูลตำบล/อำเภอ/จังหวัดไม่สำเร็จ แต่ยังใช้ lat/lng ได้", "error");
+      }
+
+      // แสดงแผนที่ + marker
+      mapWrapper.style.display = "block";
+      initOrUpdateMap(currentLat, currentLng, true);
+
+    }, (err) => {
+      console.error(err);
+      locationStatusDot.classList.remove("ok");
+      locationStatusText.textContent = "ดึงตำแหน่งไม่สำเร็จ";
+      showToast("ไม่สามารถดึงตำแหน่งได้ โปรดอนุญาต GPS", "error");
+    }, {
+      enableHighAccuracy: true,
+      timeout: 15000
+    });
+  });
+
+  function renderAreaChips(container, area) {
+    container.innerHTML = "";
+    if (!area.provinceName && !area.districtName && !area.subdistrictName) {
+      container.innerHTML = '<span class="chip muted small">ยังไม่ทราบตำแหน่ง</span>';
+      return;
+    }
+    if (area.subdistrictName) {
+      container.innerHTML += `<span class="chip">ต.${area.subdistrictName}</span>`;
+    }
+    if (area.districtName) {
+      container.innerHTML += `<span class="chip">อ.${area.districtName}</span>`;
+    }
+    if (area.provinceName) {
+      container.innerHTML += `<span class="chip">จ.${area.provinceName}</span>`;
+    }
+  }
+
+  function initOrUpdateMap(lat, lng, focus = false) {
+    if (!map) {
+      map = L.map("map").setView([lat, lng], 15);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19
+      }).addTo(map);
+
+      mapMarker = L.marker([lat, lng], {draggable: true}).addTo(map);
+
+      // เมื่อขยับหมุดให้ update currentLat/Lng
+      mapMarker.on("moveend", (e) => {
+        const p = e.target.getLatLng();
+        currentLat = p.lat;
+        currentLng = p.lng;
+      });
+
+    } else {
+      map.setView([lat, lng], focus ? 15 : map.getZoom());
+      mapMarker.setLatLng([lat, lng]);
+    }
+  }
+
+  // =========================
+  // 6) Reverse Geocoding (ใช้ OpenStreetMap Nominatim)
+  // =========================
+  async function reverseGeocode(lat, lng) {
+    // Nominatim ฟรี แต่ควรใช้อย่างสุภาพ (ไม่ spam)
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+    const res = await fetch(url, {
+      headers: {
+        "Accept-Language": "th,en"
+      }
+    });
+    if (!res.ok) throw new Error("Reverse geocoding failed");
+    const data = await res.json();
+    const addr = data.address || {};
+
+    // ค่าพวกนี้อาจเปลี่ยนไปตามรูปแบบ address ของ OSM
+    const provinceName = addr.state || addr.region || null;
+    const districtName = addr.county || addr.city_district || addr.district || null;
+    const subdistrictName = addr.village || addr.suburb || addr.town || null;
+
+    // ไม่มี code แบบเป็นทางการจาก OSM ง่าย ๆ -> ใส่ null ไว้ก่อน
+    return {
+      provinceCode: null,
+      provinceName,
+      districtCode: null,
+      districtName,
+      subdistrictCode: null,
+      subdistrictName
+    };
+  }
+
+  // =========================
+  // 7) พรีวิวรูปผู้ประสบภัย
+  // =========================
+  const victimImagesInput = $("victimImages");
+  const victimImagePreview = $("victimImagePreview");
+
+  victimImagesInput.addEventListener("change", () => {
+    const files = Array.from(victimImagesInput.files || []);
+    if (files.length > 3) {
+      showToast("เลือกได้สูงสุด 3 รูป ระบบจะใช้ 3 รูปแรก", "error");
+    }
+    const showFiles = files.slice(0, 3);
+    victimImagePreview.innerHTML = "";
+    showFiles.forEach((file, idx) => {
+      const url = URL.createObjectURL(file);
+      const div = document.createElement("div");
+      div.className = "image-chip";
+      div.innerHTML = `<img src="${url}"><span>${idx + 1}</span>`;
+      victimImagePreview.appendChild(div);
+    });
+  });
+
+  // =========================
+  // 8) ส่งแบบฟอร์มขอความช่วยเหลือ
+  // =========================
+  const helpForm = $("helpForm");
+  const submitHelpBtn = $("submitHelpBtn");
+
+  helpForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const name = $("requesterName").value.trim();
+    const phone = $("requesterPhone").value.trim();
+    const contactAlt = $("requesterContactAlt").value.trim();
+    const needs = $("needs").value.trim();
+    const situation = $("situation").value.trim();
+
+    if (!name || !phone || !needs) {
+      showToast("กรุณากรอกข้อมูลที่มีเครื่องหมาย * ให้ครบ", "error");
+      return;
+    }
+
+    const files = Array.from(victimImagesInput.files || []);
+    if (files.length === 0) {
+      showToast("กรุณาอัปโหลดรูปสถานการณ์อย่างน้อย 1 รูป", "error");
+      return;
+    }
+
+    if (!currentLat || !currentLng) {
+      showToast("กรุณากดใช้ตำแหน่งปัจจุบันก่อนส่งคำขอ", "error");
+      return;
+    }
+
+    submitHelpBtn.disabled = true;
+    submitHelpBtn.innerHTML = '<span class="loading-spinner"></span> กำลังส่งข้อมูล…';
+
+    try {
+      // 1) สร้าง document reference ให้ได้ id ก่อน
+      const docRef = db.collection(HELP_COLLECTION).doc();
+      const docId = docRef.id;
+
+      // 2) อัปโหลดรูปไปยัง Storage
+      const uploadFiles = files.slice(0, 3); // จำกัด 3 รูป
+      const uploadedUrls = [];
+
+      for (let i = 0; i < uploadFiles.length; i++) {
+        const file = uploadFiles[i];
+        const ext = file.name.split(".").pop();
+        const fileName = `victim_${Date.now()}_${i}.${ext}`;
+        const storageRef = storage.ref().child(`victim_images/${docId}/${fileName}`);
+        await storageRef.put(file);
+        const url = await storageRef.getDownloadURL();
+        uploadedUrls.push(url);
+      }
+
+      // 3) สร้างข้อมูลที่เก็บลง Firestore (โครงสร้าง document)
+      const docData = {
+        // เวลา
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+
+        // ผู้ประสบภัย
+        requesterName: name,
+        requesterPhone: phone,
+        requesterContactAlt: contactAlt || null,
+        needs: needs,
+        situation: situation || null,
+
+        // ตำแหน่ง / พื้นที่
+        locationLat: currentLat,
+        locationLng: currentLng,
+        provinceCode: currentArea.provinceCode,
+        provinceName: currentArea.provinceName,
+        districtCode: currentArea.districtCode,
+        districtName: currentArea.districtName,
+        subdistrictCode: currentArea.subdistrictCode,
+        subdistrictName: currentArea.subdistrictName,
+        addressNote: null,
+
+        // รูปผู้ประสบภัย
+        victimImageUrls: uploadedUrls,
+
+        // สถานะเคส
+        status: "waiting", // waiting | accepted | completed | cancelled
+
+        // ข้อมูลผู้ช่วย (เริ่มเป็น null)
+        helperName: null,
+        helperPhone: null,
+        helperContactAlt: null,
+        helperImageUrl: null,
+        helperAcceptedAt: null,
+        completedAt: null
+      };
+
+      // 4) เขียนลง Firestore
+      await docRef.set(docData);
+
+      showToast("ส่งคำขอความช่วยเหลือสำเร็จ", "success");
+
+      // ล้างฟอร์มแบบเบา ๆ
+      helpForm.reset();
+      victimImagePreview.innerHTML = "";
+      currentLat = null;
+      currentLng = null;
+      currentArea = {
+        provinceCode: null,
+        provinceName: null,
+        districtCode: null,
+        districtName: null,
+        subdistrictCode: null,
+        subdistrictName: null
+      };
+      areaChips.innerHTML = '<span class="chip muted small">ยังไม่ทราบตำแหน่ง</span>';
+      locationStatusText.textContent = "ยังไม่ได้ดึงตำแหน่ง";
+      locationStatusDot.classList.remove("ok");
+      mapWrapper.style.display = "none";
+
+    } catch (err) {
+      console.error(err);
+      showToast("เกิดข้อผิดพลาดในการส่งข้อมูล", "error");
+    } finally {
+      submitHelpBtn.disabled = false;
+      submitHelpBtn.innerHTML = '<span class="btn-icon">📤</span> ส่งคำขอความช่วยเหลือ';
+    }
+  });
+
+  // =========================
+  // 9) หน้าดูเคส: ดึงตำแหน่ง viewer + เคส
+  // =========================
+  const gpsBadge = $("gpsBadge");
+  const viewerAreaTag = $("viewerAreaTag");
+  const casesContainer = $("casesContainer");
+  const btnRefreshCases = $("btnRefreshCases");
+
+  btnRefreshCases.addEventListener("click", () => {
+    initViewerLocationAndCases(true);
+  });
+
+  async function initViewerLocationAndCases(force = false) {
+    // ถ้าเคยมี listener แล้ว ให้ unsubscribe ก่อน (ป้องกันซ้อน)
+    if (force && unsubscribeCases) {
+      unsubscribeCases();
+      unsubscribeCases = null;
+    }
+
+    if (!navigator.geolocation) {
+      showToast("อุปกรณ์นี้ไม่รองรับ GPS", "error");
+      return;
+    }
+
+    gpsBadge.classList.add("off");
+    gpsBadge.querySelector(".badge-gps-dot").classList.remove("ok");
+    gpsBadge.innerHTML = '<span class="badge-gps-dot"></span> กำลังดึง GPS…';
+
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      viewerLat = pos.coords.latitude;
+      viewerLng = pos.coords.longitude;
+
+      gpsBadge.classList.remove("off");
+      gpsBadge.querySelector(".badge-gps-dot").classList.add("ok");
+      gpsBadge.innerHTML = '<span class="badge-gps-dot"></span> GPS ทำงานแล้ว';
+
+      try {
+        const area = await reverseGeocode(viewerLat, viewerLng);
+        viewerArea = {
+          provinceName: area.provinceName,
+          districtName: area.districtName,
+          subdistrictName: area.subdistrictName
+        };
+        renderAreaChips(viewerAreaTag, area); // reuse function แต่ใช้แท็กนี้แทน
+      } catch (e) {
+        console.error(e);
+        viewerAreaTag.innerHTML = '<span class="tag-dot"></span> ไม่สามารถอ่านข้อมูลพื้นที่ของคุณได้';
+      }
+
+      // ตั้ง listener แบบ realtime โหลดเคส
+      setupCasesListener();
+
+    }, (err) => {
+      console.error(err);
+      gpsBadge.classList.add("off");
+      gpsBadge.innerHTML = '<span class="badge-gps-dot"></span> GPS ล้มเหลว / ไม่อนุญาต';
+      showToast("ไม่สามารถดึงตำแหน่งคุณได้", "error");
+    }, {
+      enableHighAccuracy: true,
+      timeout: 15000
+    });
+  }
+
+  function setupCasesListener() {
+    // ไม่โหลดซ้ำถ้ามีอยู่แล้ว
+    if (unsubscribeCases) return;
+
+    casesContainer.innerHTML = '<div style="padding:8px;font-size:12px;color:#6b7280;display:flex;align-items:center;gap:8px;"><span class="loading-spinner"></span> กำลังโหลดเคสจาก Cloud…</div>';
+
+    unsubscribeCases = db.collection(HELP_COLLECTION)
+      .orderBy("createdAt", "desc")
+      .limit(200) // ป้องกันหนักเกินไป
+      .onSnapshot((snap) => {
+        allCases = [];
+        snap.forEach(doc => {
+          const data = doc.data();
+          allCases.push({
+            id: doc.id,
+            ...data
+          });
+        });
+        renderCases();
+      }, (err) => {
+        console.error(err);
+        showToast("ไม่สามารถโหลดเคสได้", "error");
+      });
+  }
+
+  // =========================
+  // 10) จัดกลุ่มเคส + คำนวณระยะทาง
+  // =========================
+  function distanceKm(lat1, lon1, lat2, lon2) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) *
+      Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  function renderCases() {
+    if (!allCases.length) {
+      casesContainer.innerHTML = '<div style="padding:8px;font-size:12px;color:#6b7280;">ยังไม่มีเคสในระบบ หรือกำลังโหลดข้อมูล…</div>';
+      return;
+    }
+
+    const group1 = [];
+    const group2 = [];
+    const group3 = [];
+    const group4 = [];
+
+    allCases.forEach((c) => {
+      if (!c.status || ["waiting", "accepted"].indexOf(c.status.toLowerCase()) === -1) {
+        return; // แสดงเฉพาะ waiting + accepted
+      }
+
+      const dist = distanceKm(viewerLat, viewerLng, c.locationLat, c.locationLng);
+      const withDist = {...c, distanceKm: dist};
+
+      const sName = (c.subdistrictName || "").trim();
+      const dName = (c.districtName || "").trim();
+      const pName = (c.provinceName || "").trim();
+      const vs = (viewerArea.subdistrictName || "").trim();
+      const vd = (viewerArea.districtName || "").trim();
+      const vp = (viewerArea.provinceName || "").trim();
+
+      if (sName && vs && sName === vs) {
+        group1.push(withDist);
+      } else if (dName && vd && dName === vd) {
+        group2.push(withDist);
+      } else if (pName && vp && pName === vp) {
+        group3.push(withDist);
+      } else {
+        group4.push(withDist);
+      }
+    });
+
+    const sortByDistance = (arr) => {
+      arr.sort((a, b) => {
+        const da = a.distanceKm ?? 999999;
+        const db = b.distanceKm ?? 999999;
+        return da - db;
+      });
+    };
+
+    sortByDistance(group1);
+    sortByDistance(group2);
+    sortByDistance(group3);
+    sortByDistance(group4);
+
+    let html = "";
+
+    function renderGroup(title, subtitle, arr) {
+      if (!arr.length) return;
+      html += `<div class="group-header">
+        <span class="location-label">${title}<span class="badge">${subtitle}</span></span>
+        <span class="small muted">เคส: ${arr.length}</span>
+      </div>`;
+      arr.forEach(caseData => {
+        html += renderCaseRow(caseData);
+      });
+    }
+
+    const subText = viewerArea.subdistrictName ? `ตำบล ${viewerArea.subdistrictName}` : "ตำบลเดียวกัน";
+    const disText = viewerArea.districtName ? `อำเภอ ${viewerArea.districtName}` : "อำเภอเดียวกัน";
+    const provText = viewerArea.provinceName ? `จังหวัด ${viewerArea.provinceName}` : "จังหวัดเดียวกัน";
+
+    renderGroup("เคสในตำบลเดียวกับคุณ", subText, group1);
+    renderGroup("เคสในอำเภอเดียวกับคุณ", disText, group2);
+    renderGroup("เคสในจังหวัดเดียวกับคุณ", provText, group3);
+    renderGroup("เคสต่างจังหวัด", "นอกจังหวัดของคุณ", group4);
+
+    casesContainer.innerHTML = html;
+
+    attachCaseRowEvents();
+  }
+
+  function renderCaseRow(c) {
+    const distanceLabel = c.distanceKm != null
+      ? `${c.distanceKm.toFixed(1)} กม.`
+      : "ไม่ทราบระยะทาง";
+
+    const areaText =
+      (c.subdistrictName ? `ต.${c.subdistrictName} ` : "") +
+      (c.districtName ? `อ.${c.districtName} ` : "") +
+      (c.provinceName ? `จ.${c.provinceName}` : "");
+
+    const situationShort = (c.situation || "").length > 80
+      ? (c.situation || "").slice(0, 80) + "…"
+      : (c.situation || "");
+
+    return `
+      <div class="case-row"
+           data-case-id="${c.id}"
+           data-longpress="false">
+        <div class="case-main">
+          <div class="case-topline">
+            <div class="case-name">${c.requesterName || "ไม่ระบุชื่อ"}</div>
+            <div class="case-time">${formatDateTime(c.createdAt)}</div>
+          </div>
+          <div class="case-needs">
+            ${c.needs || "-"}
+          </div>
+          <div class="case-situation">
+            ${situationShort || "ไม่มีรายละเอียดสถานการณ์"}
+          </div>
+        </div>
+        <div class="case-meta">
+          <div class="case-distance">${distanceLabel}</div>
+          <div class="case-actions">
+            ${statusBadge(c.status)}
+          </div>
+          <div class="badge-soft">${areaText || "ไม่ทราบพื้นที่"}</div>
+          <button class="btn btn-outline btn-sm" data-detail-id="${c.id}">
+            ดูรายละเอียด
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // =========================
+  // 11) Event เคส (Long press + Detail)
+  // =========================
+  function attachCaseRowEvents() {
+    const rows = casesContainer.querySelectorAll(".case-row");
+    rows.forEach(row => {
+      const caseId = row.getAttribute("data-case-id");
+
+      // คลิกปกติ -> เปิดรายละเอียด
+      const detailBtn = row.querySelector("[data-detail-id]");
+      if (detailBtn) {
+        detailBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const id = detailBtn.getAttribute("data-detail-id");
+          const cdata = allCases.find(x => x.id === id);
+          if (cdata) openDetailModal(cdata);
+        });
+      }
+
+      // long press ตรวจจับ
+      const start = (e) => {
+        e.preventDefault();
+        longPressTargetId = caseId;
+        const cdata = allCases.find(x => x.id === caseId);
+        longPressData = cdata || null;
+        longPressTimer = setTimeout(() => {
+          if (longPressTargetId && longPressData) {
+            openAcceptModal(longPressData);
+          }
+        }, 800); // 0.8 วินาที
+      };
+
+      const cancel = () => {
+        clearTimeout(longPressTimer);
+        longPressTargetId = null;
+        longPressData = null;
+      };
+
+      row.addEventListener("mousedown", start);
+      row.addEventListener("touchstart", start, {passive: false});
+      row.addEventListener("mouseup", cancel);
+      row.addEventListener("mouseleave", cancel);
+      row.addEventListener("touchend", cancel);
+      row.addEventListener("touchcancel", cancel);
+    });
+  }
+
+  // =========================
+  // 12) Modal รายละเอียดเคส
+  // =========================
+  const detailModal = $("detailModal");
+  const detailContent = $("detailContent");
+
+  function openDetailModal(c) {
+    const victimImagesHtml = (c.victimImageUrls || []).map(url => {
+      return `<div class="gallery-thumb"><img src="${url}" alt="victim image"></div>`;
+    }).join("");
+
+    const helperInfoHtml = c.helperName ? `
+      <div class="modal-section">
+        <div class="modal-section-title">ข้อมูลผู้ให้ความช่วยเหลือ</div>
+        <div><strong>ชื่อ:</strong> ${c.helperName}</div>
+        <div><strong>เบอร์:</strong> ${c.helperPhone || "-"}</div>
+        <div><strong>ช่องทางอื่น:</strong> ${c.helperContactAlt || "-"}</div>
+        <div><strong>เวลารับเคส:</strong> ${formatDateTime(c.helperAcceptedAt)}</div>
+        ${c.helperImageUrl ? `
+          <div class="gallery-row" style="margin-top:4px;">
+            <div class="gallery-thumb"><img src="${c.helperImageUrl}" alt="helper image"></div>
+          </div>` : ""}
+      </div>
+    ` : `
+      <div class="modal-section">
+        <div class="modal-section-title">ข้อมูลผู้ให้ความช่วยเหลือ</div>
+        <div class="text-muted">ยังไม่มีผู้รับเคสนี้</div>
+      </div>
+    `;
+
+    const areaText =
+      (c.subdistrictName ? `ต.${c.subdistrictName} ` : "") +
+      (c.districtName ? `อ.${c.districtName} ` : "") +
+      (c.provinceName ? `จ.${c.provinceName}` : "");
+
+    detailContent.innerHTML = `
+      <div class="modal-section">
+        <div class="modal-section-title">สถานะเคส</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+          ${statusBadge(c.status)}
+          <span class="badge-small">สร้างเมื่อ: ${formatDateTime(c.createdAt)}</span>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-title">ข้อมูลผู้แจ้ง</div>
+        <div class="modal-grid-two">
+          <div><strong>ชื่อ:</strong> ${c.requesterName || "-"}</div>
+          <div><strong>เบอร์:</strong> ${c.requesterPhone || "-"}</div>
+        </div>
+        <div><strong>ช่องทางอื่น:</strong> ${c.requesterContactAlt || "-"}</div>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-title">สิ่งที่ต้องการ / สถานการณ์</div>
+        <div><strong>สิ่งที่ต้องการ:</strong> ${c.needs || "-"}</div>
+        <div style="margin-top:4px;"><strong>สถานการณ์:</strong><br>${c.situation || "-"}</div>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-title">ตำแหน่ง</div>
+        <div><strong>พื้นที่:</strong> ${areaText || "ไม่ทราบ"}</div>
+        <div><strong>พิกัด:</strong> ${c.locationLat?.toFixed(5) || "-"}, ${c.locationLng?.toFixed(5) || "-"}</div>
+        <div class="field-hint">สามารถนำพิกัดไปเปิดใน Google Maps ได้</div>
+      </div>
+
+      <div class="modal-section">
+        <div class="modal-section-title">รูปจากผู้ประสบภัย</div>
+        ${victimImagesHtml ? `<div class="gallery-row" style="margin-top:4px;">${victimImagesHtml}</div>` : '<div class="text-muted">ไม่มีรูปแนบ</div>'}
+      </div>
+
+      ${helperInfoHtml}
+    `;
+
+    detailModal.classList.add("show");
+  }
+
+  // =========================
+  // 13) Modal รับเคส
+  // =========================
+  const acceptModal = $("acceptModal");
+  const acceptCaseSummary = $("acceptCaseSummary");
+  const acceptForm = $("acceptForm");
+  const helperImageInput = $("helperImageInput");
+  const helperImagePreview = $("helperImagePreview");
+  const acceptSubmitBtn = $("acceptSubmitBtn");
+
+  function openAcceptModal(c) {
+    selectedCaseForAccept = c;
+    selectedCaseIdForAccept = c.id;
+    helperImageFile = null;
+    helperImagePreview.innerHTML = "";
+    $("helperName").value = "";
+    $("helperPhone").value = "";
+    $("helperContactAlt").value = "";
+
+    const areaText =
+      (c.subdistrictName ? `ต.${c.subdistrictName} ` : "") +
+      (c.districtName ? `อ.${c.districtName} ` : "") +
+      (c.provinceName ? `จ.${c.provinceName}` : "");
+
+    acceptCaseSummary.innerHTML = `
+      <div><strong>ผู้แจ้ง:</strong> ${c.requesterName || "-"}</div>
+      <div><strong>เบอร์:</strong> ${c.requesterPhone || "-"}</div>
+      <div><strong>สิ่งที่ต้องการ:</strong> ${c.needs || "-"}</div>
+      <div><strong>พื้นที่:</strong> ${areaText || "ไม่ทราบ"}</div>
+      <div><strong>สถานะปัจจุบัน:</strong> ${c.status || "-"}</div>
+      <div class="text-muted small" style="margin-top:4px;">กดปุ่มด้านล่างเพื่อยืนยันว่าคุณจะเข้าไปช่วยเคสนี้</div>
+    `;
+
+    acceptModal.classList.add("show");
+  }
+
+  helperImageInput.addEventListener("change", () => {
+    const file = helperImageInput.files[0];
+    helperImageFile = null;
+    helperImagePreview.innerHTML = "";
+    if (!file) return;
+    helperImageFile = file;
+    const url = URL.createObjectURL(file);
+    const div = document.createElement("div");
+    div.className = "image-chip";
+    div.innerHTML = `<img src="${url}"><span>✔</span>`;
+    helperImagePreview.appendChild(div);
+  });
+
+  acceptForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!selectedCaseIdForAccept || !selectedCaseForAccept) {
+      showToast("ไม่พบข้อมูลเคสที่เลือก", "error");
+      return;
+    }
+
+    const helperName = $("helperName").value.trim();
+    const helperPhone = $("helperPhone").value.trim();
+    const helperContactAlt = $("helperContactAlt").value.trim();
+
+    if (!helperName || !helperPhone) {
+      showToast("กรุณากรอกชื่อและเบอร์ผู้ช่วยให้ครบ", "error");
+      return;
+    }
+
+    if (!helperImageFile) {
+      showToast("กรุณาอัปโหลดรูปยืนยันผู้ช่วย", "error");
+      return;
+    }
+
+    acceptSubmitBtn.disabled = true;
+    acceptSubmitBtn.innerHTML = '<span class="loading-spinner"></span> กำลังยืนยัน…';
+
+    try {
+      const docId = selectedCaseIdForAccept;
+      const ext = helperImageFile.name.split(".").pop();
+      const fileName = `helper_${Date.now()}.${ext}`;
+      const storageRef = storage.ref().child(`helper_images/${docId}/${fileName}`);
+      await storageRef.put(helperImageFile);
+      const url = await storageRef.getDownloadURL();
+
+      await db.collection(HELP_COLLECTION).doc(docId).update({
+        helperName: helperName,
+        helperPhone: helperPhone,
+        helperContactAlt: helperContactAlt || null,
+        helperImageUrl: url,
+        status: "accepted",
+        helperAcceptedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      showToast("รับเคสเรียบร้อย ขอบคุณที่ให้ความช่วยเหลือ", "success");
+      acceptModal.classList.remove("show");
+
+    } catch (err) {
+      console.error(err);
+      showToast("เกิดข้อผิดพลาดในการรับเคส", "error");
+    } finally {
+      acceptSubmitBtn.disabled = false;
+      acceptSubmitBtn.innerHTML = '<span class="btn-icon">✅</span> ยืนยันรับเคสนี้';
+    }
+  });
+
+  // =========================
+  // 14) ปิด Modal
+  // =========================
+  document.querySelectorAll(".modal-close").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-close-modal");
+      if (id) {
+        $(id).classList.remove("show");
+      }
+    });
+  });
+
+  [acceptModal, detailModal].forEach(modal => {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        modal.classList.remove("show");
+      }
+    });
+  });
+
+</script>
+</body>
+</html>
