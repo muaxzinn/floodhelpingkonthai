@@ -1177,19 +1177,21 @@ body, html {
 
 <script>
   // =========================
-  // 1) ตั้งค่า Firebase
+  // 1) ตั้งค่า Firebase (ของจริงของโปรเจกต์ floodhelpingkonthai)
   // =========================
-  // TODO: แก้ค่า config ด้านล่างนี้เป็นของโปรเจกต์คุณเอง (จาก Firebase console)
   const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyA7C4SIQdEeMgv3ZXqWTzuzaySzxZgkmr0",
+    authDomain: "floodhelpingkonthai.firebaseapp.com",
+    projectId: "floodhelpingkonthai",
+    storageBucket: "floodhelpingkonthai.appspot.com",
+    messagingSenderId: "714880666110",
+    appId: "1:714880666110:web:1c1e406a3bbcbebeced8af"
   };
 
+  // เริ่มต้น Firebase
   firebase.initializeApp(firebaseConfig);
+
+  // Firestore + Storage
   const db = firebase.firestore();
   const storage = firebase.storage();
 
